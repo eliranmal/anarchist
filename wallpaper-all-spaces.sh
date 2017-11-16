@@ -1,3 +1,6 @@
+#!/usr/bin/env bash
+
+
 function set_wallpaper {
 
 	local IMAGE="$1"
