@@ -13,10 +13,15 @@ function main {
             validate_args 1 "$@"
 			set_wallpaper "$@"
 			;;
-		guard)
+		deny)
             shift
             validate_args 1 "$@"
-        	guard_wallpaper "$@"
+        	guard_wallpaper_blacklist "$@"
+			;;
+		allow)
+            shift
+            validate_args 1 "$@"
+        	guard_wallpaper_whitelist "$@"
 			;;
 		*)
 			usage
@@ -51,15 +56,28 @@ image-file
 
 
 
-guard
-=====
+deny
+====
 
-watches the background image database for changes, and reverts to the old image when a forbidden image is set.
+a blacklist approach; watches the background image database for changes, and reverts to the old image when a forbidden image is set.
 
 arguments
 ---------
 
-forbidden-image
+forbidden-image[...]
+    the path of an image file that will be rejected if set as background. multiple files are supported as additional arguments.
+
+
+
+allow
+=====
+
+a whitelist approach: watches the background image database for changes, and reverts to the old image when an image that is outside the allowed images is set.
+
+arguments
+---------
+
+allowed-image[...]
     the path of an image file that will be rejected if set as background. multiple files are supported as additional arguments.
 
  "
@@ -69,15 +87,16 @@ function set_wallpaper {
 	local image="$1"
 	local db_path=~/Library/Application\ Support/Dock/desktoppicture.db
 	log "setting background image to $image..."
-	sqlite3 "$db_path" "UPDATE data SET value = '$image'" && killall Dock
+	sqlite3 "$db_path" 'UPDATE data SET value = '"'$image'"
+	killall Dock
 }
 
-function guard_wallpaper {
+function guard_wallpaper_blacklist {
 	local forbidden_images="$@"
 	local db_image
 	local db_image_new
 	local db_path=~/Library/Application\ Support/Dock/desktoppicture.db
-	db_image="$(sqlite3 "$db_path" "SELECT value FROM data")"
+	db_image="$(sqlite3 "$db_path" 'SELECT * FROM data ORDER BY value DESC LIMIT 1')"
     if [[ $forbidden_images =~ $db_image ]]; then
         log "current background image is in the forbidden images list. set another image as background first."
         exit 1
@@ -87,7 +106,7 @@ function guard_wallpaper {
 	log "watching background image database in $db_path..."
 	fswatch -o "$db_path" | while read num ;
 	do
-        db_image_new="$(sqlite3 "$db_path" "SELECT value FROM data")"
+        db_image_new="$(sqlite3 "$db_path" 'SELECT * FROM data ORDER BY value DESC LIMIT 1')"
 		log "database has changed, new background image: $db_image_new"
 		# for a fuzzy lookup, we could do [[ $db_image_new =~ $forbidden_images ]]. just saying.
         if [[ $forbidden_images =~ $db_image_new ]]; then
@@ -97,6 +116,10 @@ function guard_wallpaper {
             db_image="$db_image_new"
         fi
 	done
+}
+
+function guard_wallpaper_whitelist {
+    log "not implemented yet..."
 }
 
 function ensure_fswatch {
@@ -128,7 +151,7 @@ function validate_os {
 
 function log {
 	local msg="$1"
-	printf "%s\n\n" "$msg"
+	printf "> %s\n\n" "$msg"
 }
 
 # this is here just in case we want to avoid calling the sqlite3 command and only refresh Dock on each DB file change..
