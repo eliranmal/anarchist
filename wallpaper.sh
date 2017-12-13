@@ -1,25 +1,22 @@
 #!/usr/bin/env bash
 
 
-# ./wallpaper.sh set ~/Pictures/null.jpeg
-# ./wallpaper.sh set ~/Pictures/seethecosmos.jpg
-# ./wallpaper.sh set /Library/Caches/com.apple.desktop.admin.png
-# ./wallpaper.sh guard ~/Pictures/null.jpeg /Library/Caches/com.apple.desktop.admin.png
-# ./wallpaper.sh reject ~/Pictures/seethecosmos.jpg
-
-
 function main {
+    echo
+    validate_os
 	case "$1" in
 		help|-h)
 			usage
 			;;
 		set)
-            validate_args 2 "$@"
-			set_wallpaper "$2"
+            shift
+            validate_args 1 "$@"
+			set_wallpaper "$@"
 			;;
 		guard)
-            validate_args 2 "$@"
-        	guard_wallpaper "$2"
+            shift
+            validate_args 1 "$@"
+        	guard_wallpaper "$@"
 			;;
 		*)
 			usage
@@ -31,7 +28,7 @@ function main {
 function usage {
     log "usage:
 
-    wallpaper.sh <help|set|guard> [arguments] [-h]
+    wallpaper.sh <set|guard|help> [arguments] [-h]
 
 
 help
@@ -49,7 +46,7 @@ sets a background image across all spaces.
 arguments
 ---------
 
-wallpaper-file
+image-file
     the path of the background image to be set.
 
 
@@ -57,44 +54,43 @@ wallpaper-file
 guard
 =====
 
-watches a file for changes, and set the background image when change triggers.
+watches the background image database for changes, and reverts to the old image when a forbidden image is set.
 
 arguments
 ---------
 
-wallpaper-file
-    the path of the background image to be set on change.
-
-watched-file
-    the path of the file to watch for changes.
+forbidden-image
+    the path of an image file that will be rejected if set as background. multiple files are supported as additional arguments.
 
  "
 }
 
 function set_wallpaper {
 	local image="$1"
-	sqlite3 ~/Library/Application\ Support/Dock/desktoppicture.db "UPDATE data SET value = '$image'" && killall Dock
+	local db_path=~/Library/Application\ Support/Dock/desktoppicture.db
+	log "setting background image to $image..."
+	sqlite3 "$db_path" "UPDATE data SET value = '$image'" && killall Dock
 }
 
 function guard_wallpaper {
-	local corp_image="$1"
-	local db_path
+	local forbidden_images="$@"
 	local db_image
 	local db_image_new
-	db_path=~/Library/Application\ Support/Dock/desktoppicture.db
-	db_image="$(sqlite3 ~/Library/Application\ Support/Dock/desktoppicture.db "SELECT value FROM data")"
-	log "image to reject: $corp_image, current image: $db_image"
+	local db_path=~/Library/Application\ Support/Dock/desktoppicture.db
+	db_image="$(sqlite3 "$db_path" "SELECT value FROM data")"
+    if [[ $forbidden_images =~ $db_image ]]; then
+        log "current background image is in the forbidden images list. set another image as background first."
+        exit 1
+    fi
 
 	ensure_fswatch
-	log "watching DB in $db_path..."
+	log "watching background image database in $db_path..."
 	fswatch -o "$db_path" | while read num ;
 	do
-        db_image_new="$(sqlite3 ~/Library/Application\ Support/Dock/desktoppicture.db "SELECT value FROM data")"
-		log "DB has changed, new wallpaper: $db_image_new"
-        # todo - allow multiple corp_images
-#        if [[ $@ =~ '-h' ]]; then
-        if [[ $db_image_new == $corp_image ]]; then
-            log "shananiganz! the evil corp attempted to set a new image! let's undo that."
+        db_image_new="$(sqlite3 "$db_path" "SELECT value FROM data")"
+		log "database has changed, new background image: $db_image_new"
+        if [[ $forbidden_images =~ $db_image_new ]]; then
+            log "shenanigans! the evil corp attempted to set a new background image! let's revert to the old image."
             set_wallpaper "$db_image"
         else
             db_image="$db_image_new"
@@ -104,17 +100,8 @@ function guard_wallpaper {
 
 function ensure_fswatch {
 	if ! hash fswatch 2>/dev/null; then
-		log "fswatch is not installed."
-	    if [[ $OSTYPE = "linux-gnu" ]]; then # linux
-			log "installing via apt..."
-		    apt-get install fswatch
-		elif [[ $OSTYPE = "darwin"* ]]; then # mac
-			log "installing via brew..."
-		    brew install fswatch
-        elif [[ $OSTYPE = "msys" ]]; then # windows (mingw/git-bash)
-			log "windows is not supported, sorry..."
-			exit 1
-		fi
+		log "fswatch is not installed. installing via brew..."
+        brew install fswatch
 	fi
 }
 
@@ -126,9 +113,21 @@ function validate_args {
     fi
 }
 
+function validate_os {
+		if [[ $OSTYPE = "darwin"* ]]; then # mac
+		    return 0
+	    elif [[ $OSTYPE = "linux-gnu" ]]; then # linux
+			log "linux is not supported, sorry..."
+	        exit 1
+        elif [[ $OSTYPE = "msys" ]]; then # windows (mingw/git-bash)
+			log "windows is not supported, sorry..."
+			exit 1
+		fi
+}
+
 function log {
 	local msg="$1"
-	printf "\n%s\n" "$msg"
+	printf "%s\n\n" "$msg"
 }
 
 # this is here just in case we want to avoid calling the sqlite3 command and only refresh Dock on each DB file change..
