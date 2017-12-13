@@ -78,7 +78,7 @@ function guard_wallpaper {
 	local db_image_new
 	local db_path=~/Library/Application\ Support/Dock/desktoppicture.db
 	db_image="$(sqlite3 "$db_path" "SELECT value FROM data")"
-    if [[ $forbidden_images =~ $db_image ]]; then
+    if [[ $forbidden_images =~ "$db_image" ]]; then
         log "current background image is in the forbidden images list. set another image as background first."
         exit 1
     fi
@@ -89,6 +89,7 @@ function guard_wallpaper {
 	do
         db_image_new="$(sqlite3 "$db_path" "SELECT value FROM data")"
 		log "database has changed, new background image: $db_image_new"
+		# for a fuzzy lookup, we could do [[ $db_image_new =~ $forbidden_images ]]. just saying.
         if [[ $forbidden_images =~ $db_image_new ]]; then
             log "shenanigans! the evil corp attempted to set a new background image! let's revert to the old image."
             set_wallpaper "$db_image"
