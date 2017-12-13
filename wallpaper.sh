@@ -2,8 +2,31 @@
 
 
 # ./wallpaper.sh set ~/Pictures/null.jpeg
+# ./wallpaper.sh set ~/Pictures/seethecosmos.jpg
 # ./wallpaper.sh set /Library/Caches/com.apple.desktop.admin.png
 # ./wallpaper.sh guard ~/Pictures/null.jpeg /Library/Caches/com.apple.desktop.admin.png
+# ./wallpaper.sh reject ~/Pictures/seethecosmos.jpg
+
+
+function main {
+	case "$1" in
+		help|-h)
+			usage
+			;;
+		set)
+            validate_args 2 "$@"
+			set_wallpaper "$2"
+			;;
+		guard)
+            validate_args 2 "$@"
+        	guard_wallpaper "$2"
+			;;
+		*)
+			usage
+			;;
+	esac
+}
+
 
 function usage {
     log "usage:
@@ -48,6 +71,37 @@ watched-file
  "
 }
 
+function set_wallpaper {
+	local image="$1"
+	sqlite3 ~/Library/Application\ Support/Dock/desktoppicture.db "UPDATE data SET value = '$image'" && killall Dock
+}
+
+function guard_wallpaper {
+	local corp_image="$1"
+	local db_path
+	local db_image
+	local db_image_new
+	db_path=~/Library/Application\ Support/Dock/desktoppicture.db
+	db_image="$(sqlite3 ~/Library/Application\ Support/Dock/desktoppicture.db "SELECT value FROM data")"
+	log "image to reject: $corp_image, current image: $db_image"
+
+	ensure_fswatch
+	log "watching DB in $db_path..."
+	fswatch -o "$db_path" | while read num ;
+	do
+        db_image_new="$(sqlite3 ~/Library/Application\ Support/Dock/desktoppicture.db "SELECT value FROM data")"
+		log "DB has changed, new wallpaper: $db_image_new"
+        # todo - allow multiple corp_images
+#        if [[ $@ =~ '-h' ]]; then
+        if [[ $db_image_new == $corp_image ]]; then
+            log "shananiganz! the evil corp attempted to set a new image! let's undo that."
+            set_wallpaper "$db_image"
+        else
+            db_image="$db_image_new"
+        fi
+	done
+}
+
 function ensure_fswatch {
 	if ! hash fswatch 2>/dev/null; then
 		log "fswatch is not installed."
@@ -64,52 +118,28 @@ function ensure_fswatch {
 	fi
 }
 
-function guard_wallpaper {
-	local image="$1"
-	local path="$2"
-	ensure_fswatch
-	log "watching file $path..."
-	fswatch -o "$path" | while read num ;
-	do
-		log "file $path has changed (event ${num})"
-		set_wallpaper "$image"
-	done
-}
-
-function set_wallpaper {
-	local image="$1"
-	sqlite3 ~/Library/Application\ Support/Dock/desktoppicture.db "UPDATE data SET value = '$image'" && killall Dock
+function validate_args {
+    local min=$1; shift
+    if (($# < $min)); then
+        usage
+        exit 1
+    fi
 }
 
 function log {
 	local msg="$1"
-	printf "\n%s\n\n" "$msg"
+	printf "\n%s\n" "$msg"
 }
 
-function main {
-	case "$1" in
-		help|-h)
-			usage
-			;;
-		set)
-            if (($# < 2)); then
-                usage
-                return 1
-            fi
-			set_wallpaper "$2"
-			;;
-		guard)
-            if (($# < 3)); then
-                usage
-                return 1
-            fi
-        	guard_wallpaper "$2" "$3"
-			;;
-		*)
-			usage
-			;;
-	esac
-}
+# this is here just in case we want to avoid calling the sqlite3 command and only refresh Dock on each DB file change..
+#function wallpaper_update_trigger {
+#	local my_image="$1"
+#	local corp_image="$2"
+#	sqlite3 ~/Library/Application\ Support/Dock/desktoppicture.db "DROP TRIGGER IF EXISTS restore_desktop; CREATE TRIGGER IF NOT EXISTS restore_desktop AFTER UPDATE OF value ON data FOR EACH ROW WHEN NEW.value LIKE '%$corp_image' BEGIN UPDATE data SET value = '$my_image'; END;"
+#	sqlite3 ~/Library/Application\ Support/Dock/desktoppicture.db "DROP TRIGGER IF EXISTS restore_desktop_on_delete; CREATE TRIGGER IF NOT EXISTS restore_desktop_on_delete AFTER DELETE ON data FOR EACH ROW WHEN OLD.value LIKE '%$my_image' BEGIN UPDATE data SET value = '$my_image'; END;"
+#	sqlite3 ~/Library/Application\ Support/Dock/desktoppicture.db "DROP TRIGGER IF EXISTS restore_desktop_on_insert; CREATE TRIGGER IF NOT EXISTS restore_desktop_on_insert AFTER INSERT ON data FOR EACH ROW WHEN NEW.value LIKE '%$corp_image' BEGIN UPDATE data SET value = '$my_image'; END;"
+#}
+
 
 main "$@"
 
