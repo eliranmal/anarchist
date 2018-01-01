@@ -69,7 +69,7 @@ function set_wallpaper {
 	local image="$1"
 	local db_path=/Library/Desktop\ Pictures/LPDesktop.jpg
 	log "setting background image to $image..."
-	sudo cp -f "$image" "$db_path"
+	cp -f "$image" "$db_path"
 	killall Dock
 }
 
@@ -83,7 +83,9 @@ function guard_wallpaper {
 	log "watching background image database in $db_path..."
 	fswatch -o "$db_path" | while read num ;
 	do
-        set_wallpaper "$image"
+	    log "identified wallpaper change"
+	    guard_wallpaper "$image"
+        break
 	done
 }
 
