@@ -13,15 +13,10 @@ function main {
             validate_args 1 "$@"
 			set_wallpaper "$@"
 			;;
-		deny)
+		guard)
             shift
             validate_args 1 "$@"
-        	guard_wallpaper_blacklist "$@"
-			;;
-		allow)
-            shift
-            validate_args 1 "$@"
-        	guard_wallpaper_whitelist "$@"
+        	guard_wallpaper "$@"
 			;;
 		*)
 			usage
@@ -56,70 +51,42 @@ image-file
 
 
 
-deny
-====
-
-a blacklist approach; watches the background image database for changes, and reverts to the old image when a forbidden image is set.
-
-arguments
----------
-
-forbidden-image[...]
-    the path of an image file that will be rejected if set as background. multiple files are supported as additional arguments.
-
-
-
-allow
+guard
 =====
 
-a whitelist approach: watches the background image database for changes, and reverts to the old image when an image that is outside the allowed images is set.
+watches the background image database for changes, and reverts to your image when a forbidden image is set.
 
 arguments
 ---------
 
-allowed-image[...]
-    the path of an image file that will be rejected if set as background. multiple files are supported as additional arguments.
+image-file
+    the path of the background image to be set.
 
  "
 }
 
 function set_wallpaper {
 	local image="$1"
-	local db_path=~/Library/Application\ Support/Dock/desktoppicture.db
+	local db_path=/Library/Desktop\ Pictures/LPDesktop.jpg
 	log "setting background image to $image..."
-	sqlite3 "$db_path" 'UPDATE data SET value = '"'$image'"
+	cp -f "$image" "$db_path"
 	killall Dock
 }
 
-function guard_wallpaper_blacklist {
-	local forbidden_images="$@"
-	local db_image
-	local db_image_new
-	local db_path=~/Library/Application\ Support/Dock/desktoppicture.db
-	db_image="$(sqlite3 "$db_path" 'SELECT * FROM data ORDER BY value DESC LIMIT 1')"
-    if [[ $forbidden_images =~ $db_image ]]; then
-        log "current background image is in the forbidden images list. set another image as background first."
-        exit 1
-    fi
+function guard_wallpaper {
+	local image="$1"
+	local db_path=/Library/Desktop\ Pictures/LPDesktop.jpg
+
+	set_wallpaper "$image"
 
 	ensure_fswatch
 	log "watching background image database in $db_path..."
 	fswatch -o "$db_path" | while read num ;
 	do
-        db_image_new="$(sqlite3 "$db_path" 'SELECT * FROM data ORDER BY value DESC LIMIT 1')"
-		log "database has changed, new background image: $db_image_new"
-		# for a fuzzy lookup, we could do [[ $db_image_new =~ $forbidden_images ]]. just saying.
-        if [[ $forbidden_images =~ $db_image_new ]]; then
-            log "shenanigans! the evil corp attempted to set a new background image! let's revert to the old image."
-            set_wallpaper "$db_image"
-        else
-            db_image="$db_image_new"
-        fi
+	    log "identified wallpaper change"
+	    guard_wallpaper "$image"
+        break
 	done
-}
-
-function guard_wallpaper_whitelist {
-    log "not implemented yet..."
 }
 
 function ensure_fswatch {
@@ -153,16 +120,6 @@ function log {
 	local msg="$1"
 	printf "> %s\n\n" "$msg"
 }
-
-# this is here just in case we want to avoid calling the sqlite3 command and only refresh Dock on each DB file change..
-#function wallpaper_update_trigger {
-#	local my_image="$1"
-#	local corp_image="$2"
-#	sqlite3 ~/Library/Application\ Support/Dock/desktoppicture.db "DROP TRIGGER IF EXISTS restore_desktop; CREATE TRIGGER IF NOT EXISTS restore_desktop AFTER UPDATE OF value ON data FOR EACH ROW WHEN NEW.value LIKE '%$corp_image' BEGIN UPDATE data SET value = '$my_image'; END;"
-#	sqlite3 ~/Library/Application\ Support/Dock/desktoppicture.db "DROP TRIGGER IF EXISTS restore_desktop_on_delete; CREATE TRIGGER IF NOT EXISTS restore_desktop_on_delete AFTER DELETE ON data FOR EACH ROW WHEN OLD.value LIKE '%$my_image' BEGIN UPDATE data SET value = '$my_image'; END;"
-#	sqlite3 ~/Library/Application\ Support/Dock/desktoppicture.db "DROP TRIGGER IF EXISTS restore_desktop_on_insert; CREATE TRIGGER IF NOT EXISTS restore_desktop_on_insert AFTER INSERT ON data FOR EACH ROW WHEN NEW.value LIKE '%$corp_image' BEGIN UPDATE data SET value = '$my_image'; END;"
-#}
-
 
 main "$@"
 
