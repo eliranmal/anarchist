@@ -2,26 +2,26 @@
 
 
 function main {
-    echo
-    validate_os
+	echo
+	validate_os
 	case "$1" in
 		help|-h)
 			usage
 			;;
 		set)
-            shift
-            validate_args 1 "$@"
+			shift
+			validate_args 1 "$@"
 			set_wallpaper "$@"
 			;;
 		deny)
-            shift
-            validate_args 1 "$@"
-        	guard_wallpaper_blacklist "$@"
+			shift
+			validate_args 1 "$@"
+			guard_wallpaper_blacklist "$@"
 			;;
 		allow)
-            shift
-            validate_args 1 "$@"
-        	guard_wallpaper_whitelist "$@"
+			shift
+			validate_args 1 "$@"
+			guard_wallpaper_whitelist "$@"
 			;;
 		*)
 			usage
@@ -31,7 +31,7 @@ function main {
 
 
 function usage {
-    log "usage:
+	log "usage:
 
     wallpaper.sh <set|guard|help> [arguments] [-h]
 
@@ -97,53 +97,53 @@ function guard_wallpaper_blacklist {
 	local db_image_new
 	local db_path=~/Library/Application\ Support/Dock/desktoppicture.db
 	db_image="$(sqlite3 "$db_path" 'SELECT * FROM data ORDER BY value DESC LIMIT 1')"
-    if [[ $forbidden_images =~ $db_image ]]; then
-        log "current background image is in the forbidden images list. set another image as background first."
-        exit 1
-    fi
+	if [[ $forbidden_images =~ $db_image ]]; then
+		log "current background image is in the forbidden images list. set another image as background first."
+		exit 1
+	fi
 
 	ensure_fswatch
 	log "watching background image database in $db_path..."
 	fswatch -o "$db_path" | while read num ;
 	do
-        db_image_new="$(sqlite3 "$db_path" 'SELECT * FROM data ORDER BY value DESC LIMIT 1')"
+		db_image_new="$(sqlite3 "$db_path" 'SELECT * FROM data ORDER BY value DESC LIMIT 1')"
 		log "database has changed, new background image: $db_image_new"
 		# for a fuzzy lookup, we could do [[ $db_image_new =~ $forbidden_images ]]. just saying.
-        if [[ $forbidden_images =~ $db_image_new ]]; then
-            log "shenanigans! the evil corp attempted to set a new background image! let's revert to the old image."
-            set_wallpaper "$db_image"
-        else
-            db_image="$db_image_new"
-        fi
+		if [[ $forbidden_images =~ $db_image_new ]]; then
+			log "shenanigans! the evil corp attempted to set a new background image! let's revert to the old image."
+			set_wallpaper "$db_image"
+		else
+			db_image="$db_image_new"
+		fi
 	done
 }
 
 function guard_wallpaper_whitelist {
-    log "not implemented yet..."
+	log "not implemented yet..."
 }
 
 function ensure_fswatch {
 	if ! hash fswatch 2>/dev/null; then
 		log "fswatch is not installed. installing via brew..."
-        brew install fswatch
+		brew install fswatch
 	fi
 }
 
 function validate_args {
-    local min=$1; shift
-    if (($# < $min)); then
-        usage
-        exit 1
-    fi
+	local min=$1; shift
+	if (($# < $min)); then
+		usage
+		exit 1
+	fi
 }
 
 function validate_os {
 		if [[ $OSTYPE = "darwin"* ]]; then # mac
-		    return 0
-	    elif [[ $OSTYPE = "linux-gnu" ]]; then # linux
+			return 0
+		elif [[ $OSTYPE = "linux-gnu" ]]; then # linux
 			log "linux is not supported, sorry..."
-	        exit 1
-        elif [[ $OSTYPE = "msys" ]]; then # windows (mingw/git-bash)
+			exit 1
+		elif [[ $OSTYPE = "msys" ]]; then # windows (mingw/git-bash)
 			log "windows is not supported, sorry..."
 			exit 1
 		fi
