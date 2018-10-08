@@ -48,7 +48,7 @@ function main {
 	ensure_env
 	validate_env
 	case "$1" in
-		help|-h)
+		help|info|-h)
 			usage
 			;;
 		set)
