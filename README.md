@@ -6,6 +6,6 @@
 ```bash
 curl -O https://raw.githubusercontent.com/eliranmal/anarchist/master/[whatever].sh
 chmod u+x [whatever].sh
-./[whatever]
+./[whatever].sh
 ```
 
